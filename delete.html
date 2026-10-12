@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Heartfield — Delete Your Play Stats</title>
+<!-- Hosted beside privacy.html on the studio's site (docs/release/checklist.md); the game's Settings link opens it
+     with ?id=<farm id> (Legal.delete_url). The server (server/telemetry/worker.js /v1/delete) deletes at once. -->
+<style>
+  body { margin: 0; background: #fdf6e3; color: #5b4636; font: 17px/1.6 "Nunito", system-ui, sans-serif; }
+  main { max-width: 680px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 1.8em; line-height: 1.2; }
+  h2 { margin-top: 1.8em; font-size: 1.25em; }
+  a { color: #4f7a3a; }
+  form { margin: 1.4em 0; padding: 20px; background: #fffaf0; border: 2px solid #ead9bd; border-radius: 16px; }
+  label { display: block; font-weight: 700; margin-bottom: 8px; }
+  input { box-sizing: border-box; width: 100%; padding: 12px 14px; font: 600 20px/1.2 ui-monospace, monospace;
+          color: #5b4636; background: #fff; border: 2px solid #d9c3a0; border-radius: 10px; }
+  input:focus { outline: none; border-color: #4f7a3a; }
+  button { margin-top: 14px; padding: 12px 26px; font: 700 18px/1.2 "Nunito", system-ui, sans-serif; color: #fff;
+           background: #c0533f; border: 0; border-radius: 999px; cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  #result { margin: 14px 0 0; font-weight: 700; }
+  #result.ok { color: #4f7a3a; }
+  #result.bad { color: #c0533f; }
+</style>
+</head>
+<body>
+<main>
+<h1>Heartfield — Delete Your Play Stats</h1>
+<p>Heartfield is a farming game made by HoodieHouse. It has no accounts, and we don't collect your personal
+information. The only data we hold from the game is its anonymous <strong>play stats</strong> (how the farm is
+played), filed under your farm's random id. You can delete them here, right away.</p>
+
+<h2>How to delete them</h2>
+<ol>
+<li>In Heartfield, open <strong>☰ → Settings</strong>.</li>
+<li>Under <strong>Share play stats</strong>, tap <strong>Delete my play stats</strong>. This page opens with your
+  farm's id already filled in. (Or type in the id shown there, like <code>0123-4567-89ab-cdef</code>.)</li>
+<li>Tap <strong>Delete</strong> below.</li>
+</ol>
+
+<form id="ask">
+<label for="id">Your farm's id</label>
+<input id="id" name="id" autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"
+       placeholder="0123-4567-89ab-cdef" maxlength="40">
+<button id="go" type="submit">Delete</button>
+<p id="result" role="status" aria-live="polite"></p>
+</form>
+
+<h2>What is deleted, and what is kept</h2>
+<ul>
+<li><strong>Deleted at once:</strong> every play stat sent from that farm.</li>
+<li><strong>Kept:</strong> only a note of the farm's random id and the date of your request, so that nothing more from
+  that farm is ever kept. Nothing else.</li>
+</ul>
+
+<h2>Data we never had</h2>
+<ul>
+<li><strong>Your farm (save game)</strong> stays on your phone and in your own backups. We never receive it. Delete
+  the app to remove it. On Android, also delete the game's backup in Settings → Google → Backup. On iPhone, delete
+  its iCloud copy in Settings → [your name] → iCloud → Manage Storage.</li>
+<li><strong>Ads</strong> are shown by Google AdMob; for data Google holds, see
+  <a href="https://myadcenter.google.com">https://myadcenter.google.com</a>.</li>
+<li><strong>Purchases</strong> are handled by Apple or Google; we never see your payment details.</li>
+</ul>
+<p>More in our <a href="privacy.html">privacy policy</a>. Questions: HoodieHouse — tcb505@gmail.com</p>
+</main>
+<script>
+  const SERVER = "https://heartfield-telemetry.heartfield-telemetry.workers.dev/v1/delete";
+  const input = document.getElementById("id");
+  const button = document.getElementById("go");
+  const result = document.getElementById("result");
+
+  // "Id 0123-4567-89AB-cdef" -> "0123456789abcdef"; "" if it isn't a farm's id (the server checks the same).
+  function farmId(text) {
+    const id = text.replace(/^\s*id\s*/i, "").replace(/[\s-]/g, "").toLowerCase();
+    return /^[0-9a-f]{16}$/.test(id) ? id : "";
+  }
+
+  function shown(id) {
+    return id.match(/.{4}/g).join("-");
+  }
+
+  function say(text, ok) {
+    result.textContent = text;
+    result.className = ok ? "ok" : "bad";
+  }
+
+  const given = new URLSearchParams(location.search).get("id");
+  if (given && farmId(given)) input.value = shown(farmId(given));
+
+  document.getElementById("ask").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const id = farmId(input.value);
+    if (!id) {
+      say("That isn't a farm's id. It's 16 letters and numbers, like 0123-4567-89ab-cdef (Settings shows it).", false);
+      return;
+    }
+    button.disabled = true;
+    say("Deleting…", true);
+    try {
+      // text/plain keeps it a simple request: no preflight
+      const res = await fetch(SERVER, { method: "POST", headers: { "Content-Type": "text/plain" },
+                                        body: JSON.stringify({ id }) });
+      if (!res.ok) throw new Error(res.status);
+      const { deleted } = await res.json();
+      say(deleted > 0
+        ? `Done. Everything sent from farm ${shown(id)} is deleted, and nothing more from it will be kept.`
+        : `Done. We had nothing from farm ${shown(id)}, and nothing from it will be kept.`, true);
+    } catch {
+      say("We couldn't reach our server. Check your connection and try again, or email the id to tcb505@gmail.com.", false);
+      button.disabled = false;
+    }
+  });
+</script>
+</body>
+</html>
